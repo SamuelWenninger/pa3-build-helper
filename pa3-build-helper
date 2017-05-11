@@ -1,0 +1,176 @@
+#!/bin/bash
+# Created by Samuel Wenninger
+# Last updated 4/26/17
+
+OC='/c/Users/swenninger/git/pa3-options-components'
+PA3_FRONTEND='/c/Users/swenninger/git/pa3-frontend'
+PS3='Choice: '
+MODE=''
+options=("Build Dev" "Build Prebuild" "Upload Prebuild" "(Update) Build & Upload Prebuild"
+         "(Update) Build & Upload Dev Prebuild" "(New) Build & Upload Prebuild"
+         "Clean Bower Install" "Quit")
+modes=("Only Frontend" "Frontend & OC")
+
+function build_dev {
+  if [ $MODE == 0 ]
+    then
+      printf "\e[1;31mSTARTING BUILD-DEV ONLY FRONTEND\n\e[0m"
+      printf "\e[1;34mSWITCHING TO FRONTEND\n\e[0m" &&
+      cd ${PA3_FRONTEND} &&
+      printf "\e[1;34mSTARTING FRONTEND BUILD\n\e[0m" &&
+      grunt dev  && 
+      cd /c/Users/swenninger/git
+  elif [ $MODE == 1 ]
+    then
+      printf "\e[1;31mSTARTING BUILD-DEV FRONTEND & OC\n\e[0m"
+      printf "\e[1;34mSWITCHING TO OC\n\e[0m" &&
+      cd ${OC} &&
+      printf "\e[1;34mSTARTING OC BUILD\n\e[0m" &&
+      gulp dev:master &&
+      printf "\e[1;34mSWITCHING TO FRONTEND\n\e[0m" &&
+      cd ${PA3_FRONTEND} &&
+      printf "\e[1;34mSTARTING FRONTEND BUILD\n\e[0m" &&
+      grunt build-pa3oc-local-dev && 
+      cd /c/Users/swenninger/git
+  fi
+}
+
+function build_prebuild {
+  if [ $MODE == 0 ]
+    then
+      printf "\e[1;31mSTARTING BUILD-PREBUILD ONLY FRONTEND\n\e[0m"
+      printf "\e[1;34mSWITCHING TO FRONTEND\n\e[0m" &&
+      cd ${PA3_FRONTEND} &&
+      printf "\e[1;34mSTARTING FRONTEND BUILD\n\e[0m" &&
+      grunt && 
+      cd /c/Users/swenninger/git
+  elif [ $MODE == 1 ]
+    then
+      printf "\e[1;31mSTARTING BUILD-PREBUILD FRONTEND & OC\n\e[0m"
+      printf "\e[1;34mSWITCHING TO OC\n\e[0m" &&
+      cd ${OC} &&
+      printf "\e[1;34mSTARTING OC BUILD\n\e[0m" &&
+      gulp &&
+      printf "\e[1;34mSWITCHING TO FRONTEND\n\e[0m" &&
+      cd ${PA3_FRONTEND} &&
+      printf "\e[1;34mSTARTING FRONTEND BUILD\n\e[0m" &&
+      grunt build-pa3oc-local &&
+      printf "\e[1;34mRELEASING\n\e[0m" &&
+      grunt release --force &&
+      cd /c/Users/swenninger/git
+  fi
+}
+
+# First need to set up SSH
+## `ssh-keygen -t rsa`
+## Hit Enter for all propts
+## `ssh fxdeva10.factset.com`
+## Enter password
+## Make sure that you enable write permissions to the ~/.ssh/ folder
+## `exit`
+## `scp .ssh/id_rsa.pub fxdeva10.factset.com:~/.ssh/authorized_keys2`
+function upload_prebuild {
+  PREBUILD_FOLDER=$1 
+  PREBUILD_NAME=$2 
+  ssh fxdeva10.factset.com "mkdir -pv ~/public_html/${PREBUILD_FOLDER}" &&
+  printf "\e[1;34mSWITCHING TO FRONTEND\n\e[0m" &&
+  cd ${PA3_FRONTEND} &&
+  printf "\e[1;34mRELEASING\n\e[0m" &&
+  grunt release --force &&
+  scp ${PA3_FRONTEND}/deploy.zip\
+    fxdeva10.factset.com:~/public_html/${PREBUILD_FOLDER} &&
+  if [ -z "${PREBUILD_NAME}" ]
+    then
+      ssh fxdeva10.factset.com "cd ~/public_html/${PREBUILD_FOLDER} && 
+        unzip -o deploy.zip &&
+        \rm -f deploy.zip"
+    else
+      ssh -f fxdeva10.factset.com "cd ~/public_html/${PREBUILD_FOLDER} && 
+        unzip -o deploy.zip &&
+        \rm -f deploy.zip &&
+        ssh fxdeva10.factset.com &&
+        ~/create_prebuild.sh ${PREBUILD_NAME} ${PREBUILD_FOLDER}"
+  fi
+}
+
+function clean_bower_install {
+  cd ${OC} &&
+  rm -rf bower_components &&
+  bower cache clean &&
+  bower install &&
+  cd ${PA3_FRONTEND} &&
+  rm -rf bower_components &&
+  bower cache clean &&
+  bower install
+}
+
+select mode in "${modes[@]}"
+do
+  case $mode in
+    "Only Frontend")
+      echo "You chose: 'Only Grunt'"
+      MODE=0
+      break
+      ;;
+    "Frontend & OC")
+      echo "You chose: 'Grunt & OC'"
+      MODE=1
+      break
+      ;;
+      *) echo invalid option;;
+  esac
+done
+
+select opt in "${options[@]}"
+do
+  case $opt in
+    "Build Dev")
+      echo "You chose: 'Build Dev'"
+      build_dev
+      break
+      ;;
+    "(Update) Build & Upload Dev Prebuild")
+      echo "You chose: '(Update) Build & Upload Prebuild'"
+      read -p "Enter your directory name (in your public_html): " PREBUILD_FOLDER
+      build_dev
+      upload_prebuild ${PREBUILD_FOLDER}
+      break
+      ;;
+    "Build Prebuild")
+      echo "You chose: 'Build Prebuild'"
+      build_prebuild
+      break
+      ;;
+    "Upload Prebuild")
+      echo "You chose: 'Upload Prebuild'"
+      read -p "Enter your directory name (in your public_html): " PREBUILD_FOLDER
+      upload_prebuild ${PREBUILD_FOLDER}
+      break
+      ;;
+    "(Update) Build & Upload Prebuild")
+      echo "You chose: '(Update) Build & Upload Prebuild'"
+      read -p "Enter your directory name (in your public_html): " PREBUILD_FOLDER
+      build_prebuild
+      upload_prebuild ${PREBUILD_FOLDER}
+      break
+      ;;
+    "(New) Build & Upload Prebuild")
+      echo "You chose: '(New) Build & Upload Prebuild'"
+      read -p "EInter your directory name (in your public_html): " PREBUILD_FOLDER
+      read -p "Enter your prebuild name (your username will be prepended automatically): " PREBUILD_NAME
+      build_prebuild
+      upload_prebuild ${PREBUILD_FOLDER} ${PREBUILD_NAME}
+      break
+      ;;
+    "Clean Bower Install")
+      echo "You chose: 'Clean Bower Install'"
+      clean_bower_install
+      break
+      ;;
+    "Quit")
+      break
+      ;;
+      *) echo invalid option;;
+  esac
+done
+
